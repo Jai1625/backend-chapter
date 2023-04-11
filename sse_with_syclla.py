@@ -37,6 +37,17 @@ consumer = KafkaConsumer('chatapp', bootstrap_servers=['localhost:9092'], group_
 
 @app.route('/messages', methods=['POST'])
 def handle_message():
+    """
+    input format
+    {
+        "sender": "sender detail ",
+        "recipient": "recipient detail ",
+        "message": "message to be displayed",
+        "id": id,
+        "room_id": "room_id"
+    }
+    :return:
+    """
     data = request.get_json()
     id = uuid.UUID(int=data.get('id', 0))
     room_id = data['room_id']
