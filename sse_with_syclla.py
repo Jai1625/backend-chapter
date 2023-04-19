@@ -5,7 +5,7 @@ from flask_sse import sse
 import uuid
 import json
 import datetime
-
+import time
 from kafka import KafkaProducer, KafkaConsumer
 
 
@@ -69,28 +69,66 @@ def handle_message():
     return jsonify({'success': True})
 
 
+# @app.route('/stream/<room_id>')
+# def stream(room_id):
+#     print('working')
+#
+#     def generate():
+#         for message in consumer:
+#             data = json.loads(message.value.decode())
+#             print('working data')
+#             print(data)
+#             if data['room_id'] == room_id:
+#                 response = {
+#                     'id': data['id'],
+#                     'sender': data['sender'],
+#                     'message': data['message'],
+#                     'timestamp': data['timestamp'],
+#                     'room_id': data['room_id'],
+#                 }
+#                 yield f"data: {json.dumps(response)}\n\n"
+#             time.sleep(1)
+#     return Response(generate(), mimetype="text/event-stream", headers={
+#         "Cache-Control": "no-cache",
+#         "Connection": "keep-alive",
+#         "Access-Control-Allow-Origin": "*",
+#     })
+
+
+import threading
+
+
 @app.route('/stream/<room_id>')
 def stream(room_id):
     print('working')
-
     def generate():
-        for message in consumer:
-            data = json.loads(message.value.decode())
-            print(data)
-            if data['room_id'] == room_id:
-                response = {
-                    'id': data['id'],
-                    'sender': data['sender'],
-                    'message': data['message'],
-                    'timestamp': data['timestamp'],
-                    'room_id': data['room_id'],
-                }
-                yield f"data: {json.dumps(response)}\n\n"
+        while True:
+            # Poll for new messages from the Kafka consumer
+            msg_list = consumer.poll(timeout_ms=10000)
+            for tp, messages in msg_list.items():
+                for message in messages:
+                    data = json.loads(message.value.decode())
+                    print('working data')
+                    print(data)
+                    if data['room_id'] == room_id:
+                        response = {
+                            'id': data['id'],
+                            'sender': data['sender'],
+                            'message': data['message'],
+                            'timestamp': data['timestamp'],
+                            'room_id': data['room_id'],
+                        }
+                        print(response)
+                        yield f"data: {json.dumps(response)}\n\n"
+
+            # Send a heartbeat event to keep the connection alive
+            # yield "event: heartbeat\ndata: {}\n\n"
     return Response(generate(), mimetype="text/event-stream", headers={
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
         "Access-Control-Allow-Origin": "*",
     })
+
 
 @app.route('/stream/<room_id>/old/<last_message_id>')
 def stream_old_message(room_id, last_message_id):
