@@ -2,11 +2,13 @@ from cassandra.cluster import Cluster
 from flask import Flask, jsonify, request, Response
 from flask_cors import CORS
 from flask_sse import sse
-import uuid
 import json
-import datetime
 import time
+import uuid
+import datetime
 from kafka import KafkaProducer, KafkaConsumer
+from collections import deque
+clients = {}
 
 
 cluster = Cluster(['127.0.0.1'])
@@ -69,77 +71,12 @@ def handle_message():
     return jsonify({'success': True})
 
 
-# @app.route('/stream/<room_id>')
-# def stream(room_id):
-#     print('working')
-#
-#     def generate():
-#         for message in consumer:
-#             data = json.loads(message.value.decode())
-#             print('working data')
-#             print(data)
-#             if data['room_id'] == room_id:
-#                 response = {
-#                     'id': data['id'],
-#                     'sender': data['sender'],
-#                     'message': data['message'],
-#                     'timestamp': data['timestamp'],
-#                     'room_id': data['room_id'],
-#                 }
-#                 yield f"data: {json.dumps(response)}\n\n"
-#             time.sleep(1)
-#     return Response(generate(), mimetype="text/event-stream", headers={
-#         "Cache-Control": "no-cache",
-#         "Connection": "keep-alive",
-#         "Access-Control-Allow-Origin": "*",
-#     })
-
-
-import threading
-
-#
-# @app.route('/stream/<room_id>')
-# def stream(room_id):
-#     print('working')
-#     def generate():
-#         while True:
-#             # Poll for new messages from the Kafka consumer
-#             msg_list = consumer.poll(timeout_ms=10000)
-#             for tp, messages in msg_list.items():
-#                 for message in messages:
-#                     data = json.loads(message.value.decode())
-#                     print('working data')
-#                     print(data)
-#                     if data['room_id'] == room_id:
-#                         response = {
-#                             'id': data['id'],
-#                             'sender': data['sender'],
-#                             'message': data['message'],
-#                             'timestamp': data['timestamp'],
-#                             'room_id': data['room_id'],
-#                         }
-#                         print(response)
-#                         yield f"data: {json.dumps(response)}\n\n"
-#     return Response(generate(), mimetype="text/event-stream", headers={
-#         "Cache-Control": "no-cache",
-#         "Connection": "keep-alive",
-#         "Access-Control-Allow-Origin": "*",
-#     })
-
-
-
-clients = {}
-
-import time
-import uuid
-from collections import deque
-
-
 @app.route('/stream/<room_id>')
 def stream(room_id):
-    def event_stream():
+    print(f'room id is beeing called {room_id}')
+    def event_stream(current_room_id):
         client_id = str(uuid.uuid4())
-        clients[client_id] = {"room_id": room_id, "message_queue": deque()}
+        clients[client_id] = {"room_id": current_room_id, "message_queue": deque()}
 
         while True:
             # Poll for new messages from the Kafka consumer
@@ -147,7 +84,8 @@ def stream(room_id):
             for tp, messages in msg_list.items():
                 for message in messages:
                     data = json.loads(message.value.decode())
-                    if data['room_id'] == room_id:
+                    print(f"Getting Room id to process - {current_room_id} For Message  - {data['sender']}")
+                    if data['room_id'] == current_room_id:
                         response = {
                             'id': data['id'],
                             'sender': data['sender'],
@@ -158,7 +96,7 @@ def stream(room_id):
 
                         # Add the message to the queue for all connected clients
                         for client in clients.values():
-                            if client["room_id"] == room_id:
+                            if client["room_id"] == current_room_id:
                                 client["message_queue"].append(response)
 
             # Send all queued messages to the client as server-sent events
@@ -174,15 +112,11 @@ def stream(room_id):
         # Remove the client from the list of connected clients
         del clients[client_id]
 
-    return Response(event_stream(), mimetype="text/event-stream", headers={
+    return Response(event_stream(room_id), mimetype="text/event-stream", headers={
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
         "Access-Control-Allow-Origin": "*",
     })
-
-
-
-
 
 
 

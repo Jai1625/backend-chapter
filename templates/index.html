@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SSE Chat</title>
+</head>
+<body>
+    <form id="userinput-form">
+        <div>Enter your name</div>
+        <input id="Name" type="text" label="Enter your Name"/>
+        <button id="userNameButton" type="button">Submit</button>
+    </form>
+<!--    <h1>Chat</h1>-->
+<!--    <ul id="chat-list"></ul>-->
+<!--    <form id="chat-form">-->
+<!--        <input type="text" id="message-input" autocomplete="off" />-->
+<!--        <button type="submit">Send</button>-->
+<!--    </form>-->
+    <script>
+        document.getElementById("userNameButton").addEventListener('click', ()=>{
+            let userName = document.getElementById('Name').value;
+            console.log("submit name", userName);
+            window.name=userName;
+            window.location.href = `/message?name=${userName}`;
+        })
+    </script>
+<!--    <script type="text/javascript" src="./index.js"></script>-->
+</body>
+</html>
