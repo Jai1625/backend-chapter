@@ -97,19 +97,56 @@ def handle_message():
 
 import threading
 
+#
+# @app.route('/stream/<room_id>')
+# def stream(room_id):
+#     print('working')
+#     def generate():
+#         while True:
+#             # Poll for new messages from the Kafka consumer
+#             msg_list = consumer.poll(timeout_ms=10000)
+#             for tp, messages in msg_list.items():
+#                 for message in messages:
+#                     data = json.loads(message.value.decode())
+#                     print('working data')
+#                     print(data)
+#                     if data['room_id'] == room_id:
+#                         response = {
+#                             'id': data['id'],
+#                             'sender': data['sender'],
+#                             'message': data['message'],
+#                             'timestamp': data['timestamp'],
+#                             'room_id': data['room_id'],
+#                         }
+#                         print(response)
+#                         yield f"data: {json.dumps(response)}\n\n"
+#     return Response(generate(), mimetype="text/event-stream", headers={
+#         "Cache-Control": "no-cache",
+#         "Connection": "keep-alive",
+#         "Access-Control-Allow-Origin": "*",
+#     })
+
+
+
+clients = {}
+
+import time
+import uuid
+from collections import deque
+
 
 @app.route('/stream/<room_id>')
 def stream(room_id):
-    print('working')
-    def generate():
+    def event_stream():
+        client_id = str(uuid.uuid4())
+        clients[client_id] = {"room_id": room_id, "message_queue": deque()}
+
         while True:
             # Poll for new messages from the Kafka consumer
             msg_list = consumer.poll(timeout_ms=10000)
             for tp, messages in msg_list.items():
                 for message in messages:
                     data = json.loads(message.value.decode())
-                    print('working data')
-                    print(data)
                     if data['room_id'] == room_id:
                         response = {
                             'id': data['id'],
@@ -118,16 +155,35 @@ def stream(room_id):
                             'timestamp': data['timestamp'],
                             'room_id': data['room_id'],
                         }
-                        print(response)
-                        yield f"data: {json.dumps(response)}\n\n"
 
-            # Send a heartbeat event to keep the connection alive
-            # yield "event: heartbeat\ndata: {}\n\n"
-    return Response(generate(), mimetype="text/event-stream", headers={
+                        # Add the message to the queue for all connected clients
+                        for client in clients.values():
+                            if client["room_id"] == room_id:
+                                client["message_queue"].append(response)
+
+            # Send all queued messages to the client as server-sent events
+            while clients[client_id]["message_queue"]:
+                response = clients[client_id]["message_queue"].popleft()
+                yield f"data: {json.dumps(response)}\n\n"
+            time.sleep(0.1)
+
+            # Check if the client is still connected
+            if clients.get(client_id) is None:
+                break
+
+        # Remove the client from the list of connected clients
+        del clients[client_id]
+
+    return Response(event_stream(), mimetype="text/event-stream", headers={
         "Cache-Control": "no-cache",
         "Connection": "keep-alive",
         "Access-Control-Allow-Origin": "*",
     })
+
+
+
+
+
 
 
 @app.route('/stream/<room_id>/old/<last_message_id>')
